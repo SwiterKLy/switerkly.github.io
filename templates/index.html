@@ -1,25 +1,9 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <meta charset="UTF-8" />
     <title>Генерація і сортування зображень</title>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        form { margin-bottom: 20px; }
-        .image-container { display: flex; flex-wrap: wrap; gap: 10px; }
-        .image-box {
-            border: 1px solid #ddd;
-            padding: 5px;
-            text-align: center;
-            width: 150px;
-        }
-        .image-box img {
-            max-width: 140px;
-            max-height: 140px;
-            display: block;
-            margin: 0 auto 5px;
-        }
-    </style>
 </head>
 <body>
     <h1>Генерація і сортування зображень</h1>

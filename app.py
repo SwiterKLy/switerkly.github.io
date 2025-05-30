@@ -1,51 +1,58 @@
 import os
 import shutil
-import requests
+import time
 from io import BytesIO
+
+import requests
 from PIL import Image
 from flask import Flask, render_template, request, jsonify
-from duckduckgo_search import DDGS
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+from duckduckgo_search import DDGS
+from torchvision.models import resnet50  # Импортировал, т.к. используешь в EmbeddingNet
 
-# --- Flask app
-app = Flask(__name__)
-
-# --- Шляхи до папок
+# --- Константы путей
 POSITIVE_FOLDER = 'static/images/Positive'
 NEGATIVE_FOLDER = 'static/images/Negative'
 GENERATED_FOLDER = 'static/generated_images'
 CUSTOM_FOLDER = 'saved/custom'
 
-# --- Створення папок
+# --- Создание папок, если их нет
 os.makedirs(POSITIVE_FOLDER, exist_ok=True)
 os.makedirs(NEGATIVE_FOLDER, exist_ok=True)
 os.makedirs(GENERATED_FOLDER, exist_ok=True)
 os.makedirs(CUSTOM_FOLDER, exist_ok=True)
 
-# --- Класи моделі
+# --- Инициализация Flask
+app = Flask(__name__)
+
+# --- Определение моделей
+
 class EmbeddingNet(nn.Module):
     def __init__(self):
-        
         super(EmbeddingNet, self).__init__()
-        
-        # Load a pre-trained ResNet50 model
-        resnet = resnet50()
-        
-        # Freeze all layers except the last Convolution block
+        resnet = resnet50(pretrained=True)
         for name, param in resnet.named_parameters():
             if "layer4" not in name:
                 param.requires_grad = False
-                
-        # Define the embedding network by adding a few dense layers
-        self.features = nn.Sequential(*list(resnet.children())[:-1])  # Exclude the last FC layer
+
+        self.features = nn.Sequential(*list(resnet.children())[:-1])
         self.flatten = nn.Flatten()
-        self.dense1 = nn.Sequential(nn.Linear(2048, 512), nn.ReLU(), SyncBatchNorm(512))
-        self.dense2 = nn.Sequential(nn.Linear(512, 256), nn.ReLU(), SyncBatchNorm(256))
+        self.dense1 = nn.Sequential(
+            nn.Linear(2048, 512),
+            nn.ReLU(),
+            nn.SyncBatchNorm(512)
+        )
+        self.dense2 = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.SyncBatchNorm(256)
+        )
         self.output = nn.Linear(256, 256)
-        
+
     def forward(self, x):
         x = self.features(x)
         x = self.flatten(x)
@@ -53,6 +60,7 @@ class EmbeddingNet(nn.Module):
         x = self.dense2(x)
         x = self.output(x)
         return x
+
 
 class DistanceLayer(nn.Module):
     def __init__(self):
@@ -63,6 +71,7 @@ class DistanceLayer(nn.Module):
         an_distance = F.pairwise_distance(anchor, negative, 2)
         return ap_distance, an_distance
 
+
 class TripletMarginLoss(nn.Module):
     def __init__(self, margin):
         super(TripletMarginLoss, self).__init__()
@@ -70,44 +79,50 @@ class TripletMarginLoss(nn.Module):
 
     def forward(self, ap_distance, an_distance):
         return F.relu(ap_distance - an_distance + self.margin).mean()
-    
+
+
 class SiameseNetwork(nn.Module):
     def __init__(self, embedding_net):
         super(SiameseNetwork, self).__init__()
         self.embedding_net = embedding_net
-    
+
     def forward(self, x1, x2):
         embed1 = self.embedding_net(x1)
         embed2 = self.embedding_net(x2)
         return embed1, embed2
 
-# --- Пристрій
+
+# --- Устройство (CPU/GPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# --- Whitelist для безпечного завантаження
+# --- Безопасная загрузка модели (Whitelist)
 torch.serialization.add_safe_globals({
     'SiameseNetwork': SiameseNetwork,
     'EmbeddingNet': EmbeddingNet,
     'DistanceLayer': DistanceLayer
 })
 
-# --- Завантаження моделі
+# --- Загрузка модели
 model_path = 'Model.pth'
 model = torch.load(model_path, map_location=device, weights_only=False)
 model.to(device)
 model.eval()
 
-# --- Трансформації
+# --- Трансформации для входных изображений
 transform = transforms.Compose([
     transforms.Resize((200, 200)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
 ])
 
+# --- Вспомогательные функции
+
 def preprocess_image(image: Image.Image):
+    """Применить трансформации и подготовить тензор"""
     return transform(image).unsqueeze(0).to(device)
 
 def calculate_similarity(img1: Image.Image, img2: Image.Image):
+    """Вычислить сходство между двумя изображениями через модель"""
     tensor1 = preprocess_image(img1)
     tensor2 = preprocess_image(img2)
     with torch.no_grad():
@@ -116,9 +131,8 @@ def calculate_similarity(img1: Image.Image, img2: Image.Image):
         similarity = 1 / (1 + dist)
     return similarity
 
-import time
-
 def download_images(query, max_images):
+    """Скачать изображения с DuckDuckGo по запросу"""
     imgs = []
     with DDGS() as ddgs:
         results = ddgs.images(query, max_results=max_images)
@@ -128,16 +142,37 @@ def download_images(query, max_images):
                 response = requests.get(url, timeout=5)
                 img = Image.open(BytesIO(response.content)).convert('RGB')
                 imgs.append(img)
-                time.sleep(1)  # ← додано паузу між завантаженнями
+                time.sleep(1)  # пауза для снижения нагрузки
             except Exception:
                 continue
     return imgs
 
+# --- Flask маршруты
 
 @app.route('/')
 def index():
     images = os.listdir(GENERATED_FOLDER)
     return render_template('index.html', images=images)
+
+def combine_images(img1: Image.Image, img2: Image.Image, final_size=(400, 200)) -> Image.Image:
+    """
+    Создать изображение final_size, поделённое пополам по ширине:
+    левая половина - img1, правая - img2.
+    Каждый из входных образов масштабируется в (final_width/2, final_height).
+    """
+    final_width, final_height = final_size
+    half_width = final_width // 2
+
+    # Масштабируем изображения к размеру половины итогового изображения
+    img1_resized = img1.resize((half_width, final_height), Image.Resampling.LANCZOS)
+    img2_resized = img2.resize((half_width, final_height), Image.Resampling.LANCZOS)
+
+    # Создаём новое изображение
+    combined = Image.new('RGB', final_size)
+    combined.paste(img1_resized, (0, 0))
+    combined.paste(img2_resized, (half_width, 0))
+
+    return combined
 
 @app.route('/generate', methods=['POST'])
 def generate():
@@ -146,7 +181,7 @@ def generate():
     target2 = data.get('target2')
     quantity = int(data.get('quantity', 5))
 
-    # Очистка папки
+    # Очистить папку GENERATED_FOLDER
     for f in os.listdir(GENERATED_FOLDER):
         os.remove(os.path.join(GENERATED_FOLDER, f))
 
@@ -159,20 +194,16 @@ def generate():
         for j, img2 in enumerate(imgs2):
             sim = calculate_similarity(img1, img2)
             if sim >= threshold:
-                name1 = f"{target1}_{i}.jpg"
-                path1 = os.path.join(GENERATED_FOLDER, name1)
-                if not os.path.exists(path1):
-                    img1.save(path1)
-                    saved_count += 1
-                name2 = f"{target2}_{j}.jpg"
-                path2 = os.path.join(GENERATED_FOLDER, name2)
-                if not os.path.exists(path2):
-                    img2.save(path2)
-                    saved_count += 1
+                combined_img = combine_images(img1, img2, final_size=(400, 200))
+                combined_name = f"{target1}_{i}_{target2}_{j}.jpg"
+                combined_path = os.path.join(GENERATED_FOLDER, combined_name)
+                combined_img.save(combined_path)
+                saved_count += 1
 
     if saved_count == 0:
         return jsonify({'message': 'Не знайдено схожих зображень для генерації.'}), 200
-    return jsonify({'message': f'Згенеровано {saved_count} зображень, схожих за запитами.'}), 200
+    return jsonify({'message': f'Згенеровано {saved_count} комбінованих зображень, схожих за запитами.'}), 200
+
 
 @app.route('/sort', methods=['POST'])
 def sort():
@@ -188,12 +219,14 @@ def sort():
         target_folder = os.path.join(CUSTOM_FOLDER, folder_path)
         os.makedirs(target_folder, exist_ok=True)
 
+    # Переместить выбранные изображения в целевую папку
     for img in selected_images:
         src = os.path.join(GENERATED_FOLDER, img)
         dst = os.path.join(target_folder, img)
         if os.path.exists(src):
             shutil.move(src, dst)
 
+    # Остальные изображения из GENERATED_FOLDER в Negative
     for img in os.listdir(GENERATED_FOLDER):
         src = os.path.join(GENERATED_FOLDER, img)
         dst = os.path.join(NEGATIVE_FOLDER, img)
@@ -201,5 +234,6 @@ def sort():
 
     return jsonify({'message': f'Зображення переміщено до {folder_path}'}), 200
 
+# --- Запуск приложения
 if __name__ == '__main__':
     app.run(debug=True)
