@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8" />
+    <title>Генерація і сортування зображень</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        form { margin-bottom: 20px; }
+        .image-container { display: flex; flex-wrap: wrap; gap: 10px; }
+        .image-box {
+            border: 1px solid #ddd;
+            padding: 5px;
+            text-align: center;
+            width: 150px;
+        }
+        .image-box img {
+            max-width: 140px;
+            max-height: 140px;
+            display: block;
+            margin: 0 auto 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Генерація і сортування зображень</h1>
+
+    <!-- Форма для генерації -->
+    <form id="generateForm">
+        <label>Запит 1: <input type="text" name="target1" required /></label>
+        <label>Запит 2: <input type="text" name="target2" required /></label>
+        <label>Кількість: <input type="number" name="quantity" min="1" max="20" value="5" required /></label>
+        <button type="submit">Згенерувати</button>
+    </form>
+
+    <!-- Контейнер з зображеннями -->
+    <div class="image-container" id="imagesContainer">
+        {% for image in images %}
+        <div class="image-box">
+            <img src="{{ url_for('static', filename='generated_images/' + image) }}" alt="{{ image }}" />
+            <label><input type="checkbox" name="selected_images" value="{{ image }}" /> Обрати</label>
+        </div>
+        {% endfor %}
+    </div>
+
+    <br/>
+    <button id="sortBtn">Сортувати вибрані</button>
+
+<script>
+    // Відправляємо форму генерації через fetch (POST JSON)
+    document.getElementById('generateForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = {
+            target1: formData.get('target1'),
+            target2: formData.get('target2'),
+            quantity: formData.get('quantity'),
+        };
+
+        const response = await fetch('/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            alert('Зображення згенеровано!');
+            location.reload();
+        } else {
+            alert('Помилка генерації.');
+        }
+    });
+
+    // Кнопка сортування — відправляємо вибрані зображення на сервер
+    document.getElementById('sortBtn').addEventListener('click', async () => {
+        const checkedBoxes = document.querySelectorAll('input[name="selected_images"]:checked');
+        const selected = Array.from(checkedBoxes).map(cb => cb.value);
+        if(selected.length === 0) {
+            alert('Оберіть хоча б одне зображення для сортування!');
+            return;
+        }
+
+        // Для прикладу: сортуємо в папку Positive (можна зробити інтерфейс вибору)
+        const data = {
+            selected_images: selected,
+            folder_path: 'Positive'
+        };
+
+        const response = await fetch('/sort', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        if(response.ok) {
+            alert(result.message);
+            location.reload();
+        } else {
+            alert(result.error || 'Помилка сортування.');
+        }
+    });
+</script>
+</body>
+</html>
