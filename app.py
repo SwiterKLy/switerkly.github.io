@@ -117,6 +117,20 @@ transform = transforms.Compose([
 
 # --- Вспомогательные функции
 
+def random_duckduckgo_filters():
+    sizes = [None, "Small", "Medium", "Large", "Wallpaper"]
+    colors = [None, "color", "monochrome", "red", "blue", "green"]
+    layouts = [None, "Square", "Tall", "Wide"]
+    types = [None, "photo", "clipart", "gif"]
+
+    return {
+        "size": random.choice(sizes),
+        "color": random.choice(colors),
+        "layout": random.choice(layouts),
+        "type_image": random.choice(types),
+    }
+
+
 def preprocess_image(image: Image.Image):
     """Применить трансформации и подготовить тензор"""
     return transform(image).unsqueeze(0).to(device)
@@ -131,18 +145,28 @@ def calculate_similarity(img1: Image.Image, img2: Image.Image):
         similarity = 1 / (1 + dist)
     return similarity
 
-def download_images(query, max_images):
-    """Скачать изображения с DuckDuckGo по запросу"""
+def download_images(query, max_images, overshoot=30):
+    """Завантажити випадкові зображення з DuckDuckGo"""
     imgs = []
+    filters = random_duckduckgo_filters()
     with DDGS() as ddgs:
-        results = ddgs.images(query, max_results=max_images)
-        for res in results:
+        results = list(ddgs.images(
+            keywords=query,
+            max_results=overshoot,
+            size=filters["size"],
+            color=filters["color"],
+            layout=filters["layout"],
+            type_image=filters["type_image"]
+        ))
+        random.shuffle(results)
+        selected = results[:max_images]
+        for res in selected:
             try:
                 url = res['image']
                 response = requests.get(url, timeout=5)
                 img = Image.open(BytesIO(response.content)).convert('RGB')
                 imgs.append(img)
-                time.sleep(1)  # пауза для снижения нагрузки
+                time.sleep(1)
             except Exception:
                 continue
     return imgs
@@ -173,36 +197,55 @@ def combine_images(img1: Image.Image, img2: Image.Image, final_size=(400, 200)) 
     combined.paste(img2_resized, (half_width, 0))
 
     return combined
-
 @app.route('/generate', methods=['POST'])
 def generate():
     data = request.get_json()
     target1 = data.get('target1')
     target2 = data.get('target2')
-    quantity = int(data.get('quantity', 5))
+    required_quantity = int(data.get('quantity', 5))
 
-    # Очистить папку GENERATED_FOLDER
+    # Очистити папку GENERATED_FOLDER
     for f in os.listdir(GENERATED_FOLDER):
         os.remove(os.path.join(GENERATED_FOLDER, f))
 
-    imgs1 = download_images(target1, quantity)
-    imgs2 = download_images(target2, quantity)
-
-    threshold = 0.5
+    threshold = 0.8
     saved_count = 0
-    for i, img1 in enumerate(imgs1):
-        for j, img2 in enumerate(imgs2):
-            sim = calculate_similarity(img1, img2)
-            if sim >= threshold:
-                combined_img = combine_images(img1, img2, final_size=(400, 200))
-                combined_name = f"{target1}_{i}_{target2}_{j}.jpg"
-                combined_path = os.path.join(GENERATED_FOLDER, combined_name)
-                combined_img.save(combined_path)
-                saved_count += 1
+    batch_size = 5  # Скільки зображень завантажувати за одну ітерацію
+    attempt = 0
+    max_attempts = 10  # Захист від нескінченного циклу
+
+    used_pairs = set()
+
+    while saved_count < required_quantity and attempt < max_attempts:
+        imgs1 = download_images(target1, batch_size)
+        imgs2 = download_images(target2, batch_size)
+
+        for i, img1 in enumerate(imgs1):
+            for j, img2 in enumerate(imgs2):
+                if (i, j) in used_pairs:
+                    continue
+
+                sim = calculate_similarity(img1, img2)
+                if sim >= threshold:
+                    combined_img = combine_images(img1, img2, final_size=(400, 200))
+                    combined_name = f"{target1}_{attempt}_{i}_{target2}_{attempt}_{j}.jpg"
+                    combined_path = os.path.join(GENERATED_FOLDER, combined_name)
+                    combined_img.save(combined_path)
+                    saved_count += 1
+                    if saved_count >= required_quantity:
+                        break
+                used_pairs.add((i, j))
+            if saved_count >= required_quantity:
+                break
+
+        attempt += 1
 
     if saved_count == 0:
-        return jsonify({'message': 'Не знайдено схожих зображень для генерації.'}), 200
-    return jsonify({'message': f'Згенеровано {saved_count} комбінованих зображень, схожих за запитами.'}), 200
+        return jsonify({'message': 'Не знайдено жодного схожого зображення для генерації.'}), 200
+    elif saved_count < required_quantity:
+        return jsonify({'message': f'Згенеровано тільки {saved_count} з {required_quantity} бажаних зображень.'}), 200
+    else:
+        return jsonify({'message': f'Успішно згенеровано {saved_count} комбінованих зображень.'}), 200
 
 
 @app.route('/sort', methods=['POST'])
