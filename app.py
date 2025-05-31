@@ -212,7 +212,7 @@ def generate():
     saved_count = 0
     batch_size = 5  # Скільки зображень завантажувати за одну ітерацію
     attempt = 0
-    max_attempts = 10  # Захист від нескінченного циклу
+    max_attempts = 10  # Захист від нескінченного циклу test
 
     used_pairs = set()
 
