@@ -29,27 +29,8 @@
     <br/>
     <button id="sortBtn">Сортувати вибрані</button>
 
-<!-- Лічильник і кнопка навчання -->
-<div id="statusSection" style="margin-top: 15px; text-align: center;">
-    <p>Зображень для донавчання: <span id="totalCount">0</span>\50</p>
-    <button id="trainBtn" disabled>Донавчити модель</button>
-</div>
-
-
 <script>
-    async function updateImageCounts() {
-        try {
-            const res = await fetch('/get_counts');
-            const data = await res.json();
-            const total = (data.positive || 0) + (data.negative || 0);
-
-            document.getElementById('totalCount').textContent = total;
-            document.getElementById('trainBtn').disabled = total < 10; // Мінімум 10 загалом
-        } catch (err) {
-            console.error('Помилка підрахунку зображень:', err);
-        }
-    }
-
+    // Відправляємо форму генерації через fetch (POST JSON)
     document.getElementById('generateForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
@@ -73,6 +54,7 @@
         }
     });
 
+    // Кнопка сортування — відправляємо вибрані зображення на сервер
     document.getElementById('sortBtn').addEventListener('click', async () => {
         const checkedBoxes = document.querySelectorAll('input[name="selected_images"]:checked');
         const selected = Array.from(checkedBoxes).map(cb => cb.value);
@@ -81,9 +63,10 @@
             return;
         }
 
+        // Для прикладу: сортуємо в папку Positive (можна зробити інтерфейс вибору)
         const data = {
             selected_images: selected,
-            folder_path: 'Positive' // або зроби вибір через select
+            folder_path: 'Positive'
         };
 
         const response = await fetch('/sort', {
@@ -100,19 +83,6 @@
             alert(result.error || 'Помилка сортування.');
         }
     });
-
-    document.getElementById('trainBtn').addEventListener('click', async () => {
-        const response = await fetch('/train', { method: 'POST' });
-        const result = await response.json();
-
-        if (response.ok) {
-            alert(result.message || 'Навчання завершено');
-        } else {
-            alert(result.error || 'Помилка навчання');
-        }
-    });
-
-    window.addEventListener('load', updateImageCounts);
 </script>
 </body>
 </html>
