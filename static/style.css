@@ -115,7 +115,7 @@ form#generateForm button:hover {
 /* Кнопка сортировки */
 #sortBtn {
     display: block;
-    margin: 30px auto 0;
+    margin: 30px auto 10px; /* изменено: добавлен отступ снизу вместо нуля */
     background-color: #27ae60;
     color: white;
     border: none;
@@ -128,6 +128,30 @@ form#generateForm button:hover {
     box-shadow: 0 4px 8px rgba(39, 174, 96, 0.4);
 }
 
+
 #sortBtn:hover {
     background-color: #1e8449;
 }
+
+/* Кнопка викладання в TikTok */
+#uploadTikTokBtn {
+    display: block;
+    margin: -20px auto 0;
+    background-color: #000000;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 30px;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+#uploadTikTokBtn:hover {
+    background: linear-gradient(135deg, #25f4ee, #fe2c55);
+    color: #fff;
+    box-shadow: 0 6px 14px rgba(255, 44, 85, 0.5);
+}
+

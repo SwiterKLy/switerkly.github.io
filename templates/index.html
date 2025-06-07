@@ -84,5 +84,42 @@
         }
     });
 </script>
+
+<!-- Додано нижче кнопки "Сортувати вибрані" -->
+<br/>
+<br/><br/>
+<button id="uploadTikTokBtn">Викласти в TikTok</button>
+
+<script>
+    // ... (код генерації і сортування залишився)
+
+    // Кнопка викладання в TikTok
+    document.getElementById('uploadTikTokBtn').addEventListener('click', async () => {
+        const checkedBoxes = document.querySelectorAll('input[name="selected_images"]:checked');
+        const selected = Array.from(checkedBoxes).map(cb => cb.value);
+        if (selected.length === 0) {
+            alert('Оберіть хоча б одне зображення для викладання!');
+            return;
+        }
+
+        const data = {
+            selected_images: selected
+        };
+
+        const response = await fetch('/upload_tiktok', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+            alert(result.message || 'Зображення викладено в TikTok!');
+        } else {
+            alert(result.error || 'Помилка викладання в TikTok.');
+        }
+    });
+</script>
+
 </body>
 </html>

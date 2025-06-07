@@ -2,7 +2,7 @@ import os
 import shutil
 import time
 from io import BytesIO
-
+import random
 import requests
 from PIL import Image
 from flask import Flask, render_template, request, jsonify
