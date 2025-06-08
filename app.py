@@ -19,6 +19,7 @@ POSITIVE_FOLDER = 'static/images/Positive'
 NEGATIVE_FOLDER = 'static/images/Negative'
 GENERATED_FOLDER = 'static/generated_images'
 CUSTOM_FOLDER = 'saved/custom'
+UPLOAD_FOLDER = 'static/audio'
 
 # --- Создание папок, если их нет
 os.makedirs(POSITIVE_FOLDER, exist_ok=True)
@@ -197,7 +198,7 @@ def index():
     return render_template('index.html', images=generated_images, positive_images=positive_images)
 
 
-def combine_images(img1: Image.Image, img2: Image.Image, final_size=(400, 200)) -> Image.Image:
+def combine_images(img1: Image.Image, img2: Image.Image, final_size=(500, 500)) -> Image.Image:
     """
     Создать изображение final_size, поделённое пополам по ширине:
     левая половина - img1, правая - img2.
@@ -227,9 +228,9 @@ def generate():
     for f in os.listdir(GENERATED_FOLDER):
         os.remove(os.path.join(GENERATED_FOLDER, f))
 
-    threshold = 0.8
+    threshold = 0.2
     saved_count = 0
-    batch_size = 40  # Скільки зображень завантажувати за одну ітерацію
+    batch_size = 20  # Скільки зображень завантажувати за одну ітерацію
     attempt = 0
     max_attempts = 10  # Захист від нескінченного циклу test
 
@@ -338,17 +339,17 @@ def create_and_upload():
 @app.route('/upload_audio', methods=['POST'])
 def upload_audio():
     if 'audioFile' not in request.files:
-        return jsonify({'error': 'Файл не знайдено'}), 400
-
-    audio_file = request.files['audioFile']
-    if audio_file.filename == '':
-        return jsonify({'error': 'Не вибрано файл'}), 400
-
-    save_path = os.path.join('static', 'audio', audio_file.filename)
+        return jsonify({'error': 'Файл аудіо не знайдено'}), 400
+    file = request.files['audioFile']
+    if file.filename == '':
+        return jsonify({'error': 'Файл не вибрано'}), 400
+    
+    save_path = os.path.join('static/audio', file.filename)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    audio_file.save(save_path)
+    file.save(save_path)
+    
+    return jsonify({'message': f'Аудіо файл "{file.filename}" завантажено успішно!', 'filename': file.filename})
 
-    return jsonify({'message': 'Аудіофайл завантажено', 'filename': audio_file.filename}), 200
 
 
 # --- Запуск приложения

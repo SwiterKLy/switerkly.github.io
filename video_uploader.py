@@ -9,7 +9,7 @@ def create_video_with_transitions(
     output_file='intermediate.mp4', 
     width=500, 
     height=500, 
-    duration_per_image=3, 
+    duration_per_image=5, 
     transition_duration=1
 ):
     try:

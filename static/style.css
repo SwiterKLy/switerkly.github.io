@@ -155,3 +155,35 @@ form#generateForm button:hover {
     box-shadow: 0 6px 14px rgba(255, 44, 85, 0.5);
 }
 
+/* Центруємо контейнер кнопки завантаження аудіо */
+#uploadAudioForm {
+    text-align: center;
+    margin-top: 20px;
+}
+
+/* Специфічний стиль для кнопки завантаження аудіо */
+#uploadAudioForm button {
+    background-color: #2196F3; /* Синій фон */
+    font-weight: bold;
+}
+
+#uploadAudioForm button:hover {
+    background-color: #0b7dda;
+}
+
+#tiktokAuthBtn {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 10px 25px;
+    font-size: 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    box-shadow: 0 4px 8px rgba(105, 201, 208, 0.4);
+}
+
+#tiktokAuthBtn:hover {
+    background-color: #47a9b9;
+    box-shadow: 0 6px 12px rgba(71, 169, 185, 0.6);
+}

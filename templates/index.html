@@ -16,6 +16,21 @@
         <button type="submit">Згенерувати</button>
     </form>
 
+    <div id="loadingOverlay" style="
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    text-align: center;
+    line-height: 100vh;
+    z-index: 9999;
+">
+    Генерація зображень... Будь ласка, зачекайте.
+</div>
+
     <!-- Контейнер з згенерованими зображеннями -->
     <div class="image-container" id="imagesContainer" style="margin-top: 20px;">
         {% if images %}
@@ -49,17 +64,25 @@
     </div>
 
     <!-- Форма завантаження аудіо -->
-    <form id="uploadAudioForm" enctype="multipart/form-data" style="margin-top: 20px;">
-        <label for="audioFile">Аудіо для відео:</label>
-        <input type="file" id="audioFile" name="audioFile" accept="audio/*" required />
-        <button type="submit">Завантажити аудіо</button>
-    </form>
+<form id="uploadAudioForm" enctype="multipart/form-data" style="margin-top: 20px; text-align: center;">
+    <label for="audioFile">Оберіть аудіо для відео:</label><br />
+    <input type="file" id="audioFile" name="audioFile" accept="audio/*" required />
+    <p id="uploadStatus" style="color: green; font-weight: bold; display: none; margin-top: 10px;"></p>
+</form>
 
-    <!-- Кнопка викладання в TikTok -->
-    <br/><br/>
-    <button id="uploadTikTokBtn">Викласти в TikTok</button>
+<!-- TikTok Actions Group -->
+<div style="text-align: center; margin: 20px 0;">
+    <div style="display: inline-block; margin: 0 10px;">
+        <button id="tiktokAuthBtn" type="button" style="padding: 8px 16px;">Авторизуватися в TikTok</button>
+    </div>
+    <div style="display: inline-block; margin: 0 10px;">
+        <button id="uploadTikTokBtn" style="padding: 8px 16px;">Викласти в TikTok</button>
+    </div>
+</div>
 
 <script>
+    let uploadedAudioFileName = null;  // Зберігаємо ім'я завантаженого аудіо
+
     // Генерація зображень
     document.getElementById('generateForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -115,62 +138,122 @@
     });
 
     // Завантаження аудіо
-    document.getElementById('uploadAudioForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
+    document.getElementById('audioFile').addEventListener('change', async (e) => {
+    const fileInput = e.target;
+    const file = fileInput.files[0];
+    if (!file) return;
 
-        const formData = new FormData(e.target);
+    const formData = new FormData();
+    formData.append('audioFile', file);
 
+    const statusElem = document.getElementById('uploadStatus');
+    statusElem.style.display = 'block';
+    statusElem.style.color = 'blue';
+    statusElem.textContent = 'Завантаження аудіо...';
+
+    try {
         const response = await fetch('/upload_audio', {
             method: 'POST',
             body: formData
         });
-
         const result = await response.json();
 
         if (response.ok) {
-            alert(result.message || 'Аудіо завантажено успішно!');
+            statusElem.style.color = 'green';
+            statusElem.textContent = result.message || 'Аудіо завантажено успішно!';
+            uploadedAudioFileName = result.filename;  // ТУТ
         } else {
-            alert(result.error || 'Помилка завантаження аудіо.');
+            statusElem.style.color = 'red';
+            statusElem.textContent = result.error || 'Помилка завантаження аудіо.';
+            uploadedAudioFileName = null;
         }
-    });
+    } catch (error) {
+        statusElem.style.color = 'red';
+        statusElem.textContent = 'Помилка під час завантаження аудіо.';
+        uploadedAudioFileName = null;
+        console.error(error);
+    }
+});
+
+document.getElementById('tiktokAuthBtn').addEventListener('click', () => {
+    const authUrl = 'https://www.tiktok.com/v2/auth/authorize/?client_key=sbawczsd16t3cu877n&response_type=code&scope=user.info.basic,video.publish,video.upload&redirect_uri=https%3A%2F%2Fswiterkly.pythonanywhere.com%2Fcallback&state=123';
+    window.open(authUrl, '_blank');
+});
+
 
     // Викладка в TikTok
-    document.getElementById('uploadTikTokBtn').addEventListener('click', async () => {
-        const checkedBoxes = document.querySelectorAll('input[name="selected_images_positive"]:checked');
-        const selectedImages = Array.from(checkedBoxes).map(cb => cb.value);
+   document.getElementById('uploadTikTokBtn').addEventListener('click', async () => {
+    const checkedBoxes = document.querySelectorAll('input[name="selected_images_positive"]:checked');
+    const selectedImages = Array.from(checkedBoxes).map(cb => cb.value);
 
-        if (selectedImages.length === 0) {
-            alert('Оберіть хоча б одне зображення');
-            return;
-        }
+    if (selectedImages.length === 0) {
+        alert('Оберіть хоча б одне зображення');
+        return;
+    }
 
-        // Тут користувач вводить ім'я раніше завантаженого аудіофайлу
-        const audioFileName = prompt('Введіть ім\'я завантаженого аудіофайлу (наприклад, music.mp3):');
-        if (!audioFileName) {
-            alert('Потрібно вказати ім\'я аудіофайлу, завантаженого на сервер');
-            return;
-        }
+    if (!uploadedAudioFileName) {
+        alert('Спочатку завантажте аудіо файл!');
+        return;
+    }
 
-        const payload = {
-            selected_images: selectedImages,
-            audio_file: audioFileName,
-            tiktok_text: "Відео через API TikTok"
-        };
+    const payload = {
+        selected_images: selectedImages,
+        audio_file: uploadedAudioFileName,
+        tiktok_text: "Відео через API TikTok"
+    };
 
-        const response = await fetch('/create_and_upload', {
+    const response = await fetch('/create_and_upload', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+        alert(result.message);
+    } else {
+        alert(result.error);
+    }
+});
+
+document.getElementById('generateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    // Показати плашку
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    loadingOverlay.style.display = 'block';
+
+    const formData = new FormData(e.target);
+    const data = {
+        target1: formData.get('target1'),
+        target2: formData.get('target2'),
+        quantity: formData.get('quantity'),
+    };
+
+    try {
+        const response = await fetch('/generate', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
+            body: JSON.stringify(data)
         });
 
-        const result = await response.json();
-
         if (response.ok) {
-            alert(result.message);
+            alert('Зображення згенеровано!');
+            location.reload();
         } else {
-            alert(result.error);
+            alert('Помилка генерації.');
         }
-    });
+    } catch (error) {
+        alert('Помилка мережі при генерації.');
+        console.error(error);
+    } finally {
+        // Приховати плашку
+        loadingOverlay.style.display = 'none';
+    }
+});
+
+
 </script>
 
 </body>
