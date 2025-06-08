@@ -40,6 +40,7 @@ pyparsing==3.2.3
 python-dateutil==2.9.0.post0
 requests==2.32.3
 setuptools==80.9.0
+simple-image-download==0.2
 six==1.17.0
 sympy==1.14.0
 torch==2.7.0
