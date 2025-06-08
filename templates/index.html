@@ -58,12 +58,7 @@
     document.getElementById('sortBtn').addEventListener('click', async () => {
         const checkedBoxes = document.querySelectorAll('input[name="selected_images"]:checked');
         const selected = Array.from(checkedBoxes).map(cb => cb.value);
-        if(selected.length === 0) {
-            alert('Оберіть хоча б одне зображення для сортування!');
-            return;
-        }
 
-        // Для прикладу: сортуємо в папку Positive (можна зробити інтерфейс вибору)
         const data = {
             selected_images: selected,
             folder_path: 'Positive'
@@ -76,8 +71,8 @@
         });
 
         const result = await response.json();
-        if(response.ok) {
-            alert(result.message);
+        if (response.ok) {
+            alert('Зображення відсортовані');
             location.reload();
         } else {
             alert(result.error || 'Помилка сортування.');

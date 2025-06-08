@@ -6,7 +6,7 @@ from io import BytesIO
 import requests
 from PIL import Image
 from flask import Flask, render_template, request, jsonify
-
+from simple_image_download import simple_image_download as simp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -28,6 +28,17 @@ os.makedirs(CUSTOM_FOLDER, exist_ok=True)
 
 # --- Инициализация Flask
 app = Flask(__name__)
+
+
+def is_black_image(image: Image.Image, threshold=5):
+    """
+    Проверяет, является ли изображение почти полностью черным.
+    threshold — максимальное среднее значение (0–255), чтобы считать его черным.
+    """
+    grayscale = image.convert("L")  # переводим в ч/б
+    mean_brightness = sum(grayscale.getdata()) / (grayscale.width * grayscale.height)
+    return mean_brightness < threshold
+
 
 # --- Определение моделей
 
@@ -145,31 +156,34 @@ def calculate_similarity(img1: Image.Image, img2: Image.Image):
         similarity = 1 / (1 + dist)
     return similarity
 
-def download_images(query, max_images, overshoot=30):
-    """Завантажити випадкові зображення з DuckDuckGo"""
-    imgs = []
-    filters = random_duckduckgo_filters()
-    with DDGS() as ddgs:
-        results = list(ddgs.images(
-            keywords=query,
-            max_results=overshoot,
-            size=filters["size"],
-            color=filters["color"],
-            layout=filters["layout"],
-            type_image=filters["type_image"]
-        ))
-        random.shuffle(results)
-        selected = results[:max_images]
-        for res in selected:
+def download_images(query, max_images):
+    """Завантажити зображення за допомогою simple_image_download"""
+    response = simp.simple_image_download()
+    temp_dir = "temp_download"
+    os.makedirs(temp_dir, exist_ok=True)
+
+    try:
+        response.download(query, limit=max_images)
+        query_folder = os.path.join("simple_images", query.replace(" ", "_"))
+        image_files = os.listdir(query_folder)
+        imgs = []
+
+        for file in image_files:
             try:
-                url = res['image']
-                response = requests.get(url, timeout=5)
-                img = Image.open(BytesIO(response.content)).convert('RGB')
-                imgs.append(img)
-                time.sleep(1)
+                img_path = os.path.join(query_folder, file)
+                img = Image.open(img_path).convert('RGB')
+                if not is_black_image(img):
+                    imgs.append(img)
             except Exception:
                 continue
-    return imgs
+
+        # Очистити тимчасову папку після використання
+        shutil.rmtree("simple_images", ignore_errors=True)
+        return imgs
+    except Exception as e:
+        print(f"Error downloading images: {e}")
+        return []
+
 
 # --- Flask маршруты
 
@@ -210,7 +224,7 @@ def generate():
 
     threshold = 0.8
     saved_count = 0
-    batch_size = 5  # Скільки зображень завантажувати за одну ітерацію
+    batch_size = 40  # Скільки зображень завантажувати за одну ітерацію
     attempt = 0
     max_attempts = 10  # Захист від нескінченного циклу test
 
