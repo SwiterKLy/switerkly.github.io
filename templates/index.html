@@ -3,10 +3,10 @@
 <head>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <meta charset="UTF-8" />
-    <title>Генерація і сортування зображень</title>
+    <title>Парейдолійна автоматизованна система</title>
 </head>
 <body>
-    <h1>Генерація і сортування зображень</h1>
+    <h1>Парейдолійна автоматизованна система</h1>
 
     <!-- Форма для генерації -->
     <form id="generateForm">
@@ -16,21 +16,51 @@
         <button type="submit">Згенерувати</button>
     </form>
 
-    <!-- Контейнер з зображеннями -->
-    <div class="image-container" id="imagesContainer">
-        {% for image in images %}
-        <div class="image-box">
-            <img src="{{ url_for('static', filename='generated_images/' + image) }}" alt="{{ image }}" />
-            <label><input type="checkbox" name="selected_images" value="{{ image }}" /> Обрати</label>
-        </div>
-        {% endfor %}
+    <!-- Контейнер з згенерованими зображеннями -->
+    <div class="image-container" id="imagesContainer" style="margin-top: 20px;">
+        {% if images %}
+            {% for image in images %}
+            <div class="image-box">
+                <img src="{{ url_for('static', filename='generated_images/' + image) }}" alt="{{ image }}" />
+                <label><input type="checkbox" name="selected_images" value="{{ image }}" /> Обрати</label>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>Папка з згенерованими зображеннями порожня.</p>
+        {% endif %}
     </div>
 
     <br/>
-    <button id="sortBtn">Сортувати вибрані</button>
+    <button id="sortBtn">Зберегти зображення для підбірки</button>
+
+    <!-- Секція з зображеннями з папки Positive -->
+    <h3 style="text-align: center; margin-top: 40px;">Збережені зображення:</h3>
+    <div class="image-container" id="positiveImagesContainer" style="margin-top: 20px;">
+        {% if positive_images %}
+            {% for image in positive_images %}
+                <div class="image-box">
+                    <img src="{{ url_for('static', filename='images/Positive/' + image) }}" alt="{{ image }}" />
+                    <label><input type="checkbox" name="selected_images_positive" value="{{ image }}" /> Обрати</label>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p style="text-align: center;">Ви не зберегли ні одного зображення.</p>
+        {% endif %}
+    </div>
+
+    <!-- Форма завантаження аудіо -->
+    <form id="uploadAudioForm" enctype="multipart/form-data" style="margin-top: 20px;">
+        <label for="audioFile">Аудіо для відео:</label>
+        <input type="file" id="audioFile" name="audioFile" accept="audio/*" required />
+        <button type="submit">Завантажити аудіо</button>
+    </form>
+
+    <!-- Кнопка викладання в TikTok -->
+    <br/><br/>
+    <button id="uploadTikTokBtn">Викласти в TikTok</button>
 
 <script>
-    // Відправляємо форму генерації через fetch (POST JSON)
+    // Генерація зображень
     document.getElementById('generateForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
@@ -54,10 +84,15 @@
         }
     });
 
-    // Кнопка сортування — відправляємо вибрані зображення на сервер
+    // Сортування вибраних згенерованих зображень у Positive
     document.getElementById('sortBtn').addEventListener('click', async () => {
         const checkedBoxes = document.querySelectorAll('input[name="selected_images"]:checked');
         const selected = Array.from(checkedBoxes).map(cb => cb.value);
+
+        if (selected.length === 0) {
+            alert('Оберіть хоча б одне зображення для сортування!');
+            return;
+        }
 
         const data = {
             selected_images: selected,
@@ -78,40 +113,62 @@
             alert(result.error || 'Помилка сортування.');
         }
     });
-</script>
 
-<!-- Додано нижче кнопки "Сортувати вибрані" -->
-<br/>
-<br/><br/>
-<button id="uploadTikTokBtn">Викласти в TikTok</button>
+    // Завантаження аудіо
+    document.getElementById('uploadAudioForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-<script>
-    // ... (код генерації і сортування залишився)
+        const formData = new FormData(e.target);
 
-    // Кнопка викладання в TikTok
-    document.getElementById('uploadTikTokBtn').addEventListener('click', async () => {
-        const checkedBoxes = document.querySelectorAll('input[name="selected_images"]:checked');
-        const selected = Array.from(checkedBoxes).map(cb => cb.value);
-        if (selected.length === 0) {
-            alert('Оберіть хоча б одне зображення для викладання!');
-            return;
-        }
-
-        const data = {
-            selected_images: selected
-        };
-
-        const response = await fetch('/upload_tiktok', {
+        const response = await fetch('/upload_audio', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
+            body: formData
         });
 
         const result = await response.json();
+
         if (response.ok) {
-            alert(result.message || 'Зображення викладено в TikTok!');
+            alert(result.message || 'Аудіо завантажено успішно!');
         } else {
-            alert(result.error || 'Помилка викладання в TikTok.');
+            alert(result.error || 'Помилка завантаження аудіо.');
+        }
+    });
+
+    // Викладка в TikTok
+    document.getElementById('uploadTikTokBtn').addEventListener('click', async () => {
+        const checkedBoxes = document.querySelectorAll('input[name="selected_images_positive"]:checked');
+        const selectedImages = Array.from(checkedBoxes).map(cb => cb.value);
+
+        if (selectedImages.length === 0) {
+            alert('Оберіть хоча б одне зображення');
+            return;
+        }
+
+        // Тут користувач вводить ім'я раніше завантаженого аудіофайлу
+        const audioFileName = prompt('Введіть ім\'я завантаженого аудіофайлу (наприклад, music.mp3):');
+        if (!audioFileName) {
+            alert('Потрібно вказати ім\'я аудіофайлу, завантаженого на сервер');
+            return;
+        }
+
+        const payload = {
+            selected_images: selectedImages,
+            audio_file: audioFileName,
+            tiktok_text: "Відео через API TikTok"
+        };
+
+        const response = await fetch('/create_and_upload', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert(result.message);
+        } else {
+            alert(result.error);
         }
     });
 </script>

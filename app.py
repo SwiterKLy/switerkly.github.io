@@ -2,7 +2,7 @@ import os
 import shutil
 import time
 from io import BytesIO
-
+from video_uploader import create_and_upload_video
 import requests
 from PIL import Image
 from flask import Flask, render_template, request, jsonify
@@ -189,8 +189,13 @@ def download_images(query, max_images):
 
 @app.route('/')
 def index():
-    images = os.listdir(GENERATED_FOLDER)
-    return render_template('index.html', images=images)
+    generated_images = os.listdir(GENERATED_FOLDER)
+    positive_folder = os.path.join(app.static_folder, 'images', 'Positive')
+    positive_images = []
+    if os.path.exists(positive_folder):
+        positive_images = os.listdir(positive_folder)
+    return render_template('index.html', images=generated_images, positive_images=positive_images)
+
 
 def combine_images(img1: Image.Image, img2: Image.Image, final_size=(400, 200)) -> Image.Image:
     """
@@ -276,6 +281,8 @@ def sort():
         target_folder = os.path.join(CUSTOM_FOLDER, folder_path)
         os.makedirs(target_folder, exist_ok=True)
 
+    all_images = set(os.listdir(GENERATED_FOLDER))
+
     # Переместить выбранные изображения в целевую папку
     for img in selected_images:
         src = os.path.join(GENERATED_FOLDER, img)
@@ -283,13 +290,66 @@ def sort():
         if os.path.exists(src):
             shutil.move(src, dst)
 
-    # Остальные изображения из GENERATED_FOLDER в Negative
-    for img in os.listdir(GENERATED_FOLDER):
-        src = os.path.join(GENERATED_FOLDER, img)
-        dst = os.path.join(NEGATIVE_FOLDER, img)
-        shutil.move(src, dst)
+    # Удалить все НЕ выбранные изображения из GENERATED_FOLDER
+    not_selected = all_images - set(selected_images)
+    for img in not_selected:
+        path = os.path.join(GENERATED_FOLDER, img)
+        if os.path.exists(path):
+            os.remove(path)
 
-    return jsonify({'message': f'Зображення переміщено до {folder_path}'}), 200
+    return jsonify({'message': f'Выбранные изображения перемещены в {folder_path}, остальные удалены'}), 200
+
+from flask import request, jsonify
+import os
+
+@app.route('/create_and_upload', methods=['POST'])
+def create_and_upload():
+    data = request.get_json()
+
+    selected_images = data.get('selected_images', [])
+    audio_file = data.get('audio_file', 'music.mp3')
+    tiktok_text = data.get('tiktok_text', 'Видео через API')
+
+    if not selected_images:
+        return jsonify({'error': 'Не вибрано ні одного зображення'}), 400
+
+    # Формуємо повні шляхи
+    full_image_paths = [os.path.join(POSITIVE_FOLDER, img) for img in selected_images]
+    full_audio_path = os.path.join('static', 'audio', audio_file)
+
+    # Перевіряємо існування файлів
+    for img_path in full_image_paths:
+        if not os.path.isfile(img_path):
+            return jsonify({'error': f'Файл зображення не знайдено: {img_path}'}), 400
+    if not os.path.isfile(full_audio_path):
+        return jsonify({'error': f'Аудіофайл не знайдено: {full_audio_path}'}), 400
+
+    try:
+        publish_id = create_and_upload_video(
+            image_files=full_image_paths,
+            audio_file=full_audio_path,
+            tiktok_text=tiktok_text
+        )
+    except Exception as e:
+        return jsonify({'error': f'Помилка при створенні та завантаженні відео: {str(e)}'}), 500
+
+    return jsonify({'message': 'Відео опубліковано', 'publish_id': publish_id}), 200
+
+@app.route('/upload_audio', methods=['POST'])
+def upload_audio():
+    if 'audioFile' not in request.files:
+        return jsonify({'error': 'Файл не знайдено'}), 400
+
+    audio_file = request.files['audioFile']
+    if audio_file.filename == '':
+        return jsonify({'error': 'Не вибрано файл'}), 400
+
+    save_path = os.path.join('static', 'audio', audio_file.filename)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    audio_file.save(save_path)
+
+    return jsonify({'message': 'Аудіофайл завантажено', 'filename': audio_file.filename}), 200
+
 
 # --- Запуск приложения
 if __name__ == '__main__':
